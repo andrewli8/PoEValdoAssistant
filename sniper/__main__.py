@@ -408,6 +408,7 @@ class App:
                 backoff_s=round(pricer.backoff_remaining, 1),
                 unpriced=len(unpriced),
                 total=len(rewards),
+                session_invalid=pricer.session_invalid,
             )
         )
 
@@ -488,6 +489,8 @@ class App:
                     # backoff lifts, so stop the batch rather than spin. The
                     # unpriced rewards never got a last_priced stamp, so they
                     # are still due and go first on the next pass.
+                    if pricer.session_invalid:
+                        event("trade_session_invalid", reason=str(e))
                     event(
                         "trade_backoff",
                         reason=str(e),

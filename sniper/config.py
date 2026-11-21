@@ -102,6 +102,16 @@ def load_extra_overrides(path: Path) -> dict:
     return {k: raw[k] for k in keys if raw.get(k) is not None}
 
 
+def user_agent(version: str) -> str:
+    """Descriptive User-Agent for GGG and poe.ninja. The contact address
+    comes from SNIPER_CONTACT in .env so no one's email lives in the code."""
+    import os
+
+    contact = os.environ.get("SNIPER_CONTACT", "").strip()
+    suffix = f"; contact: {contact}" if contact else ""
+    return f"valdo-map-sniper/{version} (personal snipe-margin tool{suffix})"
+
+
 @dataclass(frozen=True)
 class ServerConfig:
     host: str = "127.0.0.1"

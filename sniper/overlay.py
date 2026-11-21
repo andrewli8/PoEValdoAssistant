@@ -943,6 +943,9 @@ class Overlay:
         where the profit numbers come from.
         """
         health = self._pricing_health
+        if health is not None and health.session_invalid:
+            self._price_label.config(text="TRADE SESSION INVALID (POESESSID)", fg=BAD)
+            return
         if health is not None and health.backoff_s > 0:
             self._price_label.config(text=f"RATE LIMITED {health.backoff_s:.0f}s", fg=BAD)
             return
