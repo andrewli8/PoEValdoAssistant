@@ -30,7 +30,7 @@ _ROUTE_CAP = 1000
 # tab silently loses whatever the new version added - new fields simply
 # arrive missing, which reads as a broken feature rather than an old script.
 # KEEP IN SYNC with @version in userscript/valdo-sniper.user.js.
-EXPECTED_USERSCRIPT_VERSION = "0.8.0"
+EXPECTED_USERSCRIPT_VERSION = "0.9.0"
 
 # The app serves its own userscript over plain HTTP on the websocket port, so
 # installing is one click (Tampermonkey intercepts any *.user.js URL) and the
@@ -242,6 +242,9 @@ class SniperServer:
             # how long it was already live before we saw it: the head start
             # every other sniper had. Null on DOM-captured listings.
             index_lag_ms=None if listing.index_lag_ms is None else round(listing.index_lag_ms),
+            # live-socket push -> forwarded by the userscript (tab clock):
+            # the page's own fetch round trip on the net path
+            push_to_send_ms=listing.push_to_send_ms,
             mods=list(listing.mods),  # raw wording, for tuning match patterns
         )
 

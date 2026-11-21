@@ -58,7 +58,8 @@ Userscript -> Python:
   "indexed_at": "ISO-8601 or null: GGG's own index time (network capture only)",
   "capture": "\"net\" | \"dom\": which path produced this listing",
   "type_line": "string or null: the item's base type (\"Vermillion Ring\")",
-  "generic": false
+  "generic": false,
+  "push_to_send_ms": "number or null: page live-socket push -> forwarded (0.9.0+)"
 }
 ```
 
@@ -147,6 +148,27 @@ real response (2026-08-10, sanitized copy in
 - The DOM MutationObserver + retry ladder + 2 s sweep stay on as the
   authority behind the hook; whichever path sees a listing first wins,
   `seen` dedupes the other.
+
+### Live-socket push hook (0.9.0)
+
+The userscript runs at `document-start` and wraps `window.WebSocket` in a
+Proxy with only a `construct` trap (so `instanceof`, `WebSocket.OPEN` and
+the prototype stay native). Sockets whose URL matches `/api/trade2?/live/`
+get one extra `message` listener that records each id in `{"new": [ids]}`
+frames with `performance.now()`; every other frame is ignored. The
+script's own `ws://127.0.0.1` connection uses the WebSocket captured before
+the patch. Everything else (`main()`) still waits for `DOMContentLoaded`.
+
+Two uses, zero extra requests:
+
+- **Push evidence.** A fetched listing whose id the socket announced is
+  forwarded even inside the 4 s page-load silent window; un-announced
+  fetches still follow the window, so a socket opened before the hook
+  degrades to the pre-0.9.0 behaviour.
+- **Timing.** `push_to_send_ms` (both capture paths) is measured on the
+  tab's single clock; on the net path it is mostly the page's own fetch
+  round trip. `tools/latency_report.py` summarizes it with the sound
+  worker's `sound_queue_ms` / `sound_call_ms`.
 
 Python -> Userscript:
 
