@@ -140,6 +140,9 @@ class AlertsConfig:
     generic_sound: str = ""
     volume: float = 0.5  # 0.0-1.0; scales both alert WAVs (see sniper/sound.py)
     traveled_display_seconds: float = 10.0  # keep the traveled map's mods readable
+    # copy the traveled map's name to the clipboard: Ctrl+F, Ctrl+V in the
+    # seller's shop to find it (local only, nothing is sent to the game)
+    copy_on_travel: bool = True
     feed_rows: int = 40  # live-feed history rows (the area scrolls)
     # Jackpot: net AND yield both at or above these (see margin.is_jackpot).
     # Gets its own colour, a looping alarm until consumed/expired, the
@@ -156,6 +159,9 @@ class AlertsConfig:
 class HotkeyConfig:
     combo: str = "ctrl+alt+t"
     consume: str = "all"  # "all" | "top"
+    # Two-client setups: press while the BUYER client is focused to mark it;
+    # travel then always focuses that client. Empty disables the key.
+    mark_buyer: str = "ctrl+alt+b"
 
 
 @dataclass(frozen=True)
@@ -356,6 +362,8 @@ def load_config(path: str | Path = "config.yaml") -> Config:
         raise ConfigError(f"hotkey.consume must be 'all' or 'top', got {hotkey.consume!r}")
     if not hotkey.combo.strip():
         raise ConfigError("hotkey.combo must not be empty")
+    if hotkey.mark_buyer.strip().lower() == hotkey.combo.strip().lower():
+        raise ConfigError("hotkey.mark_buyer must differ from hotkey.combo")
 
     rules = []
     for i, entry in enumerate(raw.get("mod_warnings") or []):

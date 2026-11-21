@@ -36,7 +36,13 @@ from sniper.bus import (
     WarmupStatus,
 )
 from sniper.config import Config, ConfigError, load_config
-from sniper.gamewindow import GameWatcher, focus_poe_window
+from sniper.gamewindow import (
+    BuyerWindow,
+    GameWatcher,
+    buyer_alive,
+    focus_poe_window,
+    mark_foreground,
+)
 from sniper.logging_setup import event
 from sniper.models import ClickResult, Decision
 from sniper.modrules import ModRules
@@ -86,6 +92,8 @@ class App:
             on_tabs_changed=self._on_tabs_changed,
         )
         self.watcher = GameWatcher(config.game.process_names)
+        # the marked buyer client (two-client setups); None = any PoE window
+        self.buyer: BuyerWindow | None = None
         # every recent decision (any verdict) so grayed-out feed rows are
         # clickable too; _traveled_ids guards one-travel-per-listing
         self._recent: OrderedDict[str, Decision] = OrderedDict()
@@ -257,9 +265,43 @@ class App:
 
     # ------------------------------------------------------------ travel path
 
+    async def mark_buyer(self) -> None:
+        """Mark-buyer key: remember the focused PoE client as the buyer.
+        Local only - nothing is sent to the game or the trade site."""
+        title = self.config.game.window_title
+        buyer = await asyncio.get_running_loop().run_in_executor(None, mark_foreground, title)
+        if buyer is not None:
+            self.buyer = buyer
+        if self.bus:
+            self.bus.put(GameStatus(self.watcher.running.is_set(), self._buyer_state()))
+            if buyer is None:
+                self.bus.put(ClickOutcome("", False, "mark buyer: focus a PoE window first"))
+
+    def _buyer_state(self) -> str:
+        return "" if self.buyer is None else "marked"
+
+    async def _buyer_gate(self) -> bool:
+        """With a buyer marked, travel only while THAT client is alive: any
+        PoE process passing the gate would send account A to a hideout with
+        only client B in game. Checked before anything is consumed."""
+        if self.buyer is None:
+            return True
+        alive = await asyncio.get_running_loop().run_in_executor(
+            None, buyer_alive, self.buyer, self.config.game.window_title
+        )
+        if alive:
+            return True
+        event("travel_blocked", reason="buyer_lost", pid=self.buyer.pid)
+        if self.bus:
+            self.bus.put(GameStatus(self.watcher.running.is_set(), "lost"))
+            self.bus.put(ClickOutcome("", False, "buyer client lost - press mark key again"))
+        return False
+
     async def hotkey_pressed(self) -> None:
         """One user press = at most one click_travel (hard ToS constraint).
         Runs on the asyncio loop, scheduled by the keyboard hook thread."""
+        if not await self._buyer_gate():
+            return
         alert = self.store.consume_best()
         self._push_alerts(new_alert=False)
         if alert is None:
@@ -287,6 +329,8 @@ class App:
             event("travel_click_ignored", reason="poe_not_running", listing_id=listing_id)
             if self.bus:
                 self.bus.put(ClickOutcome(listing_id, False, "PoE not running - click ignored"))
+            return
+        if not await self._buyer_gate():
             return
         if listing_id in self._traveled_ids:
             event("travel_click_noop", reason="already_traveled", listing_id=listing_id)
@@ -329,7 +373,7 @@ class App:
                 self.bus.put(ClickOutcome(lid, False, "tab gone - travel not sent"))
         # click first (latency-critical), then bring the game to front
         await asyncio.get_running_loop().run_in_executor(
-            None, focus_poe_window, self.config.game.window_title
+            None, focus_poe_window, self.config.game.window_title, self.buyer
         )
 
     # ------------------------------------------------------------ live tuning
@@ -566,7 +610,7 @@ class App:
     async def run_async(self) -> None:
         def on_game_change(running: bool) -> None:
             if self.bus:
-                self.bus.put(GameStatus(running))
+                self.bus.put(GameStatus(running, self._buyer_state()))
 
         tasks = [
             asyncio.create_task(self.server.serve_forever(), name="ws-server"),
@@ -618,6 +662,12 @@ def run_with_overlay(config: Config, config_path: str) -> None:
     except HotkeyError as e:
         loop.call_soon_threadsafe(loop.stop)
         raise SystemExit(str(e)) from None
+    mark_key = None
+    if config.hotkey.mark_buyer.strip():
+        try:
+            mark_key = Hotkey(config.hotkey.mark_buyer, loop, app.mark_buyer, app.watcher.running)
+        except HotkeyError as e:
+            event("mark_buyer_unavailable", error=str(e))  # travel still works
 
     # UI-thread callbacks marshal into the asyncio loop; nothing UI-side
     # touches App state directly.
@@ -654,6 +704,8 @@ def run_with_overlay(config: Config, config_path: str) -> None:
         root.mainloop()
     finally:
         hotkey.unregister()
+        if mark_key is not None:
+            mark_key.unregister()
         loop.call_soon_threadsafe(loop.stop)
         thread.join(timeout=2)
 

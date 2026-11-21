@@ -328,3 +328,9 @@ def shown_pin(pinned: AlertView | None, alerts) -> AlertView | None:
     live alert exists. The hotkey always takes the best LIVE alert, so a pin
     holding the top slot over one would make the big row lie."""
     return pinned if pinned is not None and not alerts else None
+
+
+def travel_clipboard_text(view: AlertView) -> str:
+    """The traveled map's own flavor name (unique per map), not the reward
+    key (shared by many maps); generic listings fall back to their key."""
+    return (view.item_name or view.key or "").strip()

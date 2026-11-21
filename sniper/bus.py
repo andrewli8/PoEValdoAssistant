@@ -41,6 +41,7 @@ class ClickOutcome:
 @dataclass(frozen=True)
 class GameStatus:
     running: bool
+    buyer: str = ""  # "" not marked | "marked" | "lost" (two-client setups)
 
 
 @dataclass(frozen=True)

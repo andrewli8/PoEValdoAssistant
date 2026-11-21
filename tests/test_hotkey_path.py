@@ -26,7 +26,9 @@ def build_app(monkeypatch, consume: str = "all"):
         return True
 
     monkeypatch.setattr(app.server, "send_click_travel", fake_send)
-    monkeypatch.setattr("sniper.__main__.focus_poe_window", lambda t: focused.append(t) or True)
+    monkeypatch.setattr(
+        "sniper.__main__.focus_poe_window", lambda t, buyer=None: focused.append(t) or True
+    )
     return app, bus, clicks, focused
 
 
@@ -255,3 +257,70 @@ async def test_top_slot_is_always_the_hotkey_target_even_while_pinned(monkeypatc
     await app.hotkey_pressed()
     assert clicks[-1] == top_shown  # what the overlay showed is what the press took
     assert shown_pin(pinned_view, app.store.views()) is pinned_view  # nothing live: pin shows
+
+
+async def test_lost_buyer_blocks_travel_before_anything_is_consumed(monkeypatch):
+    """Client B alone passes the any-PoE-process gate; with a buyer marked
+    the press must not send account A anywhere, and the alert stays live
+    for when the buyer is back."""
+    from sniper.gamewindow import BuyerWindow
+
+    app, bus, clicks, focused = build_app(monkeypatch)
+    app.buyer = BuyerWindow(hwnd=10, pid=100, created=1.0)
+    monkeypatch.setattr("sniper.__main__.buyer_alive", lambda b, t: False)
+    feed(app, "best", 60)
+
+    await app.hotkey_pressed()
+    assert clicks == [] and focused == []
+    assert app.store.views(), "alert not consumed by a blocked press"
+    outcomes = [e for e in bus.drain() if isinstance(e, ClickOutcome)]
+    assert "buyer client lost" in outcomes[-1].reason
+
+
+async def test_live_buyer_is_the_window_focused(monkeypatch):
+    from sniper.gamewindow import BuyerWindow
+
+    app, _bus, clicks, _focused = build_app(monkeypatch)
+    buyer = BuyerWindow(hwnd=10, pid=100, created=1.0)
+    app.buyer = buyer
+    seen = []
+    monkeypatch.setattr("sniper.__main__.buyer_alive", lambda b, t: True)
+    monkeypatch.setattr(
+        "sniper.__main__.focus_poe_window", lambda t, b=None: seen.append(b) or True
+    )
+    feed(app, "best", 60)
+    await app.hotkey_pressed()
+    assert clicks == ["best"] and seen == [buyer]
+
+
+async def test_mark_buyer_rejected_keeps_previous_mark(monkeypatch):
+    from sniper.gamewindow import BuyerWindow
+
+    app, bus, _clicks, _focused = build_app(monkeypatch)
+    old = BuyerWindow(hwnd=10, pid=100, created=1.0)
+    app.buyer = old
+    monkeypatch.setattr("sniper.__main__.mark_foreground", lambda t: None)
+    await app.mark_buyer()
+    assert app.buyer is old
+    assert any("focus a PoE window" in e.reason for e in bus.drain() if isinstance(e, ClickOutcome))
+
+
+def test_clipboard_text_is_the_map_name_not_the_reward():
+    from dataclasses import replace
+
+    from sniper.alerts import travel_clipboard_text
+
+    app_view = _a_view()
+    assert travel_clipboard_text(app_view) == app_view.item_name
+    assert travel_clipboard_text(replace(app_view, item_name="")) == app_view.key
+
+
+def _a_view():
+    from sniper.__main__ import App as _App
+
+    app = _App(make_config(), Bus())
+    lst = parse_frame(
+        make_listing_frame(listing_id="x", price={"amount": 60, "currency": "divine"})
+    )
+    app._on_decision(margin.evaluate(lst, app.book, app.config.thresholds, ModRules([])))
+    return app.store.views()[0]

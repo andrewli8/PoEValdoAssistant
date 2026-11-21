@@ -19,7 +19,7 @@ from collections import deque
 from tkinter import font as tkfont
 
 from sniper import attention, browser
-from sniper.alerts import AlertView, shown_pin
+from sniper.alerts import AlertView, shown_pin, travel_clipboard_text
 from sniper.bus import (
     AlertsChanged,
     Bus,
@@ -793,14 +793,20 @@ class Overlay:
                         alerts_dirty = True
                 self._status_line.config(text=text, fg=GOOD if ev.ok else BAD)
             elif isinstance(ev, GameStatus):
+                text = "PoE running" if ev.running else "PoE not running"
+                if ev.buyer == "marked":
+                    text += " · buyer ✓"
+                elif ev.buyer == "lost":
+                    text += " · BUYER LOST"
                 self._game_label.config(
-                    text="PoE running" if ev.running else "PoE not running",
-                    fg=GOOD if ev.running else BAD,
+                    text=text,
+                    fg=BAD if not ev.running or ev.buyer == "lost" else GOOD,
                 )
             elif isinstance(ev, Traveled):
                 # keep the traveled listing in the top slot (mods visible
                 # inline) so it's readable during the loading screen
                 self._pin_top(ev.view)
+                self._copy_for_shop_search(ev.view)
                 alerts_dirty = True
             elif isinstance(ev, ListingSeen):
                 self._feed_entries.appendleft(ev.entry)
@@ -1074,6 +1080,20 @@ class Overlay:
             self._on_travel(self._alerts[0].listing_id)
         elif self._pinned_top is not None:
             self._on_travel(self._pinned_top.listing_id)  # no-ops: already traveled
+
+    def _copy_for_shop_search(self, view: AlertView) -> None:
+        """Map name -> clipboard, for Ctrl+F / Ctrl+V in the seller's shop.
+        Tk thread only (tkinter is not thread-safe). Local; sends nothing."""
+        text = travel_clipboard_text(view)
+        if not self._config.alerts.copy_on_travel or not text:
+            return
+        try:
+            self._root.clipboard_clear()
+            self._root.clipboard_append(text)
+        except tk.TclError as e:
+            event("clipboard_failed", error=repr(e))
+            return
+        event("clipboard_copied", listing_id=view.listing_id, text=text)
 
     def _shown_pin(self) -> AlertView | None:
         """The traveled pin, but only while no live alert exists. The hotkey
