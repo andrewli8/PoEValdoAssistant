@@ -520,8 +520,9 @@ function main() {
 
   /**
    * handleRow with a fast retry ladder: a row that is not parseable yet
-   * (price/seller still rendering) is re-tried on a rAF then short
-   * timeouts, so it forwards within ~50ms instead of waiting up to 2s for
+   * (price/seller still rendering) is re-tried on a zero timeout then short
+   * timeouts (NOT requestAnimationFrame: rAF never fires in a hidden tab,
+   * and most live-search tabs are hidden, so the ladder never started), so it forwards within ~50ms instead of waiting up to 2s for
    * the safety sweep (which remains the net for rows that outlast the
    * ladder). `silent` is sticky per attempt chain.
    */
@@ -539,7 +540,7 @@ function main() {
       setTimeout(retry, RETRY_DELAYS_MS[attempt]);
       attempt += 1;
     };
-    requestAnimationFrame(retry);
+    setTimeout(retry, 0);
   }
 
   let observedContainer = null;

@@ -19,7 +19,7 @@ from collections import deque
 from tkinter import font as tkfont
 
 from sniper import attention, browser
-from sniper.alerts import AlertView
+from sniper.alerts import AlertView, shown_pin
 from sniper.bus import (
     AlertsChanged,
     Bus,
@@ -1070,10 +1070,16 @@ class Overlay:
     def _click_top(self) -> None:
         if self._on_travel is None:
             return
-        if self._pinned_top is None and self._alerts:
+        if self._alerts:
             self._on_travel(self._alerts[0].listing_id)
         elif self._pinned_top is not None:
             self._on_travel(self._pinned_top.listing_id)  # no-ops: already traveled
+
+    def _shown_pin(self) -> AlertView | None:
+        """The traveled pin, but only while no live alert exists. The hotkey
+        always takes the best LIVE alert, so a pin holding the top slot over
+        a live alert made the big row and the hotkey's target disagree."""
+        return shown_pin(self._pinned_top, self._alerts)
 
     def _pin_top(self, view: AlertView) -> None:
         """Sets pin state only; the caller (drain) renders once per batch."""
@@ -1259,7 +1265,7 @@ class Overlay:
         event("open_link", url=url, browser=browser.open_url(url))
 
     def _render_alerts(self) -> None:
-        pinned = self._pinned_top
+        pinned = self._shown_pin()
         top_widgets = self._top_widgets
         self._clear_frame(self._pairings)
         if not self._alerts and pinned is None:
@@ -1291,10 +1297,10 @@ class Overlay:
         for widget in top_widgets:
             widget.configure(cursor="hand2")
 
-        # while pinned, the traveled listing holds the top slot and live
-        # alerts queue below it
+        # the pin only shows while there is no live alert (_shown_pin), so the
+        # top slot is always exactly what the hotkey would take
         top = pinned if pinned is not None else self._alerts[0]
-        runner_views = self._alerts[:2] if pinned is not None else self._alerts[1:]
+        runner_views = self._alerts[1:]
         if top.mismatch:
             self._banner.config(
                 text=f"⚠  CURRENCY MISMATCH: {top.currency.upper()} ≠ "
@@ -1467,7 +1473,7 @@ class Overlay:
 
     def _draw_countdown(self) -> None:
         self._countdown.delete("all")
-        if self._pinned_top is not None:
+        if self._shown_pin() is not None:
             total = self._config.alerts.traveled_display_seconds
             remaining = max(0.0, self._pinned_until - time.monotonic())
             jackpot = self._pinned_top.jackpot

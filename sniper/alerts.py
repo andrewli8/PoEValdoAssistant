@@ -321,3 +321,10 @@ class AlertStore:
         self._consumed[lid] = time.monotonic()
         while len(self._consumed) > _CONSUMED_CAP:
             self._consumed.popitem(last=False)
+
+
+def shown_pin(pinned: AlertView | None, alerts) -> AlertView | None:
+    """What the overlay's top slot may show of a traveled pin: only while no
+    live alert exists. The hotkey always takes the best LIVE alert, so a pin
+    holding the top slot over one would make the big row lie."""
+    return pinned if pinned is not None and not alerts else None

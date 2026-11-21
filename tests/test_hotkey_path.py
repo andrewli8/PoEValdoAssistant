@@ -234,3 +234,24 @@ async def test_every_decision_reaches_the_feed(monkeypatch):
     ]
     assert seen[0].net_div == 100
     assert seen[1].net_div == 5
+
+
+async def test_top_slot_is_always_the_hotkey_target_even_while_pinned(monkeypatch):
+    """consume=top leaves runners-up live after a travel. The traveled pin
+    must then yield the top slot, or the big row shows one listing while a
+    reflex press takes another."""
+    from sniper.alerts import shown_pin
+
+    app, bus, clicks, _focused = build_app(monkeypatch, consume="top")
+    feed(app, "worse", 120)
+    feed(app, "best", 60)
+    await app.hotkey_pressed()
+    traveled = app.store.views()  # runners-up still live
+    pinned_view = next(e.view for e in bus.drain() if type(e).__name__ == "Traveled")
+
+    assert traveled, "consume=top keeps the runner-up"
+    assert shown_pin(pinned_view, traveled) is None  # the live alert owns the slot
+    top_shown = traveled[0].listing_id
+    await app.hotkey_pressed()
+    assert clicks[-1] == top_shown  # what the overlay showed is what the press took
+    assert shown_pin(pinned_view, app.store.views()) is pinned_view  # nothing live: pin shows
