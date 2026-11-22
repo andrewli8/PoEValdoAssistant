@@ -18,3 +18,5 @@ price_cache.json
 scoring_overrides.yaml
 *.egg-info/
 searches.txt
+dist/
+build/

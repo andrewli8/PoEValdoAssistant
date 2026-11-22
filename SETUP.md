@@ -26,13 +26,15 @@ under x64 emulation. Use a real Windows PC.
 1. **Two accounts.**
    - **A is the buyer.** It holds the currency and does every purchase.
    - **B** is the account you play on.
-2. **Install Python 3.12+** from python.org and tick *Add python.exe to PATH*.
-3. **Get the app.**
-   - Download the branch ZIP:
-     `https://github.com/andrewli8/PoEValdoAssistant/archive/refs/heads/feat/two-client-assist.zip`
-   - Unzip it.
-   - Copy `.env.example` to `.env`.
-4. **Double-click `start.bat`.** The first run takes about a minute.
+2. **Install the app.**
+   - Download `ValdoSniper-Setup.exe` from
+     https://github.com/andrewli8/PoEValdoAssistant/releases/tag/build-latest
+   - Run it. Windows SmartScreen warns because the installer isn't code-signed: click **More info**, then **Run anyway**.
+   - The installer needs no admin rights and installs to `%LOCALAPPDATA%\Programs\ValdoSniper`. Your `config.yaml`, `.env`, logs and saved searches live there too.
+3. **Leave "Start Valdo Sniper now" ticked** on the last page.
+4. Later, start it from the Start menu: **Valdo Sniper**.
+
+   Running from source instead (Python 3.12+ installed): download the branch ZIP and double-click `start.bat`.
 5. **Open the sniper Chrome:** in the overlay, click **Open the sniper Chrome**.
    - The app launches its own Chrome with its own profile and the right flags, so there's no shortcut to make.
    - It's a fresh Chrome with no extensions yet, and it opens a setup page with these steps:
@@ -50,7 +52,7 @@ under x64 emulation. Use a real Windows PC.
 
 ## Every session
 
-1. Start `start.bat`.
+1. Start **Valdo Sniper** from the Start menu.
 2. Click **Open my live searches** (also in the ⚙ panel).
 3. Start **client A** on account A and park it in your hideout.
 4. Start **client B** on account B.
