@@ -148,3 +148,7 @@ def test_failing_detach_still_flashes(win, monkeypatch):
     monkeypatch.setattr(gamewindow.win32process, "AttachThreadInput", attach)
     assert focus_poe_window(TITLE) is False
     assert ("flash", 20) in win.calls
+
+
+def test_start_time_jitter_does_not_lose_a_live_buyer(win):
+    assert buyer_alive(BuyerWindow(hwnd=10, pid=100, created=100.5 + 0.004), TITLE) is True

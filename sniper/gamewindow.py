@@ -111,7 +111,10 @@ def buyer_alive(buyer: BuyerWindow, title: str) -> bool:
         _tid, pid = win32process.GetWindowThreadProcessId(buyer.hwnd)
     except Exception:  # noqa: BLE001 - window died mid-check (pywintypes.error)
         return False
-    return pid == buyer.pid and _process_created(pid) == buyer.created
+    created = _process_created(pid)
+    # tolerance, not float equality: a live buyer must never read as lost
+    # (the gate fails closed); a restart differs by far more than a second
+    return pid == buyer.pid and created is not None and abs(created - buyer.created) < 1.0
 
 
 def _topmost_poe_window(title: str) -> int | None:

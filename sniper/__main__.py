@@ -19,6 +19,8 @@ from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+import httpx
+
 from sniper import logging_setup, pricecache
 from sniper.alerts import AlertStore
 from sniper.bus import (
@@ -574,8 +576,11 @@ class App:
                     # only THIS reward is broken (bad payload, odd name);
                     # the rest of the batch is still worth pricing
                     event("trade_price_error", reward=reward, error=repr(e))
-                    # retried at its next refresh, not every 15s pass
-                    last_priced[reward] = time.monotonic()
+                    # an HTTP refusal for THIS reward (400/404) would repeat
+                    # every 15s pass: retry it at its next refresh instead.
+                    # Anything else (a bad payload) may be transient: retry soon.
+                    if isinstance(e, httpx.HTTPStatusError):
+                        last_priced[reward] = time.monotonic()
                     continue
                 last_priced[reward] = time.monotonic()
                 div_prices = [

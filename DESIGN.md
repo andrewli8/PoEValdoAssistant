@@ -295,8 +295,12 @@ for regex, `match_all` for combos where every pattern must hit):
   of open live searches — 10 min earned a 30-minute API backoff on a busy
   session. Requests are paced from the API's own `X-Rate-Limit-*` headers
   (a blind 3s only until the first response teaches us the real budget),
-  and 429/Retry-After backs off exponentially. `POESESSID` from .env is
-  attached when present.
+  and 429/Retry-After backs off exponentially. The **Ip** rule is paced at
+  half its sustained rate (`tradeprice.IP_SHARE`): that bucket is shared
+  with the browser's own `/api/trade/fetch` calls on every live push,
+  which are the alert path. 401/403 also back off globally and show
+  `TRADE API REFUSED US`; a 400/404 on one reward skips only that reward
+  until its next refresh. `POESESSID` from .env is attached when present.
 - ToS stance: these are supplementary PRICING queries like poe.ninja was
   — a handful of requests per refresh cycle — not listing polling for
   snipes (which remains push-only via the live-search tabs).
@@ -431,6 +435,22 @@ deliberately left out of that file.
   only thing automated besides the single click bound to the press.
 - Hotkey is inert (no-op with a soft warning) if the PoE process is not
   detected.
+- **Two clients (buyer marking).** Both clients' windows are titled "Path
+  of Exile", so `hotkey.mark_buyer` records the focused PoE window as the
+  buyer by hwnd + pid + process start time (`gamewindow.BuyerWindow`).
+  With a buyer marked, a press or overlay click first checks that exact
+  client is alive (`App._buyer_gate`, on a dedicated win32 thread) and is
+  refused before anything is consumed if not (`BUYER LOST`): any PoE
+  process passing the gate would otherwise send the trade-site account to
+  a hideout with only the other client in game. Focus then targets the
+  buyer only, never "whichever PoE window is on top".
+- **No synthetic input.** Focusing uses `AttachThreadInput` to the
+  foreground thread + `SetForegroundWindow`; nothing is typed or clicked
+  in any game client. A refusal flashes the taskbar button instead.
+- The overlay's top slot is always the hotkey's target: the traveled pin
+  only shows while no live alert exists (`alerts.shown_pin`).
+- On travel the map name goes to the clipboard (`alerts.copy_on_travel`)
+  for Ctrl+F in the seller's shop; local only.
 
 ## Known risks / open questions
 
