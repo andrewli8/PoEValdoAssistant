@@ -367,6 +367,8 @@ searches you aren't actually racing for.
 
 ### Two accounts, two clients
 
+Short step-by-step version: [SETUP.md](SETUP.md).
+
 Run a dedicated **buyer** account next to the one you play on. The sniper
 travels whichever account is logged into the trade site, so the setup is
 about keeping that one account in one place.
