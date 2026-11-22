@@ -17,8 +17,17 @@ def test_opens_in_chrome_when_installed(monkeypatch, tmp_path):
     monkeypatch.setattr(subprocess, "Popen", lambda args, **kw: launched.append(args))
     monkeypatch.setattr(webbrowser, "open", lambda url: defaulted.append(url))
 
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
     assert browser.open_url("http://127.0.0.1:8765/valdo-sniper.user.js") == "chrome"
-    assert launched == [[str(chrome), "http://127.0.0.1:8765/valdo-sniper.user.js"]]
+    # always the sniper profile + anti-throttling flags, URL last
+    assert launched == [
+        [
+            str(chrome),
+            f"--user-data-dir={tmp_path / 'ValdoSniperChrome'}",
+            *browser.SNIPER_FLAGS,
+            "http://127.0.0.1:8765/valdo-sniper.user.js",
+        ]
+    ]
     assert defaulted == []
 
 
@@ -58,3 +67,10 @@ def test_install_location_fallback(monkeypatch, tmp_path):
         monkeypatch.delenv(var, raising=False)
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
     assert browser.chrome_path() == str(exe)
+
+
+def test_first_run_is_a_missing_sniper_profile(monkeypatch, tmp_path):
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    assert browser.is_first_run()
+    (tmp_path / "ValdoSniperChrome").mkdir()
+    assert not browser.is_first_run()

@@ -32,30 +32,26 @@ under x64 emulation. Use a real Windows PC.
      `https://github.com/andrewli8/PoEValdoAssistant/archive/refs/heads/feat/two-client-assist.zip`
    - Unzip it.
    - Copy `.env.example` to `.env`.
-4. **Make a sniper Chrome.** Create a desktop shortcut with this target:
-
-   ```
-   "C:\Program Files\Google\Chrome\Application\chrome.exe" --user-data-dir="%LOCALAPPDATA%\ValdoSniperChrome" --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows --disable-features=IntensiveWakeUpThrottling
-   ```
-
-   It opens a separate Chrome that keeps background tabs running at full speed.
-   Close every Chrome window the first time you use it.
-5. **In the sniper Chrome:**
-   - Log into pathofexile.com as **account A only**.
-   - Install Tampermonkey.
-   - Go to `chrome://extensions`, then *Tampermonkey*, then *Details*, and turn on **Allow User Scripts**.
-   - Go to Settings, then *Performance*:
-     - Add `pathofexile.com` to *Always keep these sites active*.
-     - Turn off Energy Saver.
-6. **Double-click `start.bat`.** The first run takes about a minute.
-   - In the overlay, click **Install the browser script**, then **Install**.
-7. **Open your Valdo live searches** in the sniper Chrome and press *Live search*.
+4. **Double-click `start.bat`.** The first run takes about a minute.
+5. **Open the sniper Chrome:** in the overlay, click **Open the sniper Chrome**.
+   - The app launches its own Chrome with its own profile and the right flags, so there's no shortcut to make.
+   - It's a fresh Chrome with no extensions yet, and it opens a setup page with these steps:
+     - Install Tampermonkey.
+     - Go to `chrome://extensions`, then *Tampermonkey*, then *Details*, and turn on **Allow User Scripts**.
+     - Install the browser script.
+     - Log into pathofexile.com as **account A only**.
+     - Go to Settings, then *Performance*: add `pathofexile.com` to *Always keep these sites active*, and turn off Energy Saver.
+6. **Import your searches.** In Better Trading, open your Valdo folder's ⋯ menu and choose **Export**.
+   - In the overlay, click **Import Better Trading searches**, paste the export, and click **Save**.
+   - For several folders, put one export per line.
+   - The searches are saved in `searches.txt` for next time.
+7. **Click Open my live searches.** Every search opens as a live tab for the current league, one every 6 seconds, to stay under the trade site's search limit.
    - When Chrome asks whether the site may access devices on your local network, click **Allow**.
 
 ## Every session
 
 1. Start `start.bat`.
-2. Open the sniper Chrome. Your live-search tabs should reconnect.
+2. Click **Open my live searches** (also in the ⚙ panel).
 3. Start **client A** on account A and park it in your hideout.
 4. Start **client B** on account B.
 5. Click into client A and press **Ctrl+Alt+B**. The status strip shows `buyer ✓`.
@@ -70,7 +66,8 @@ The status strip should read `N tabs · PoE running · buyer ✓ · Trade prices
 
 | What you see | What to do |
 |---|---|
-| `0 tabs` | Check that Allow User Scripts is on, and reload the trade tabs |
+| `0 tabs` | Tampermonkey is missing in the sniper Chrome, or Allow User Scripts is off. Click **Open the sniper Chrome** and check the setup page, then reload the trade tabs |
+| Nothing opens | Chrome isn't installed in a standard place. Install Google Chrome normally, then try again |
 | Console shows `ERR_BLOCKED_BY_LOCAL_NETWORK_ACCESS_CHECKS` | Lock icon, then *Site settings*, then allow *Local network access* for pathofexile.com, then reload |
 | `update script` | Click it, then hard-reload the trade tabs (Ctrl+Shift+R) |
 | `BUYER LOST` | Client A closed or restarted: click into it and press Ctrl+Alt+B |

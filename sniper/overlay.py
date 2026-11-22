@@ -26,6 +26,7 @@ from sniper.bus import (
     ClickOutcome,
     GameStatus,
     ListingSeen,
+    Notice,
     PriceStatus,
     PricingHealth,
     RewardPrices,
@@ -234,9 +235,17 @@ class Overlay:
         on_price_override=None,
         # Callable[[float, float], None]: jackpot bars (min net, min yield)
         on_jackpot_change=None,
+        # Better Trading searches: open them all as live tabs / save a paste
+        on_open_searches=None,  # Callable[[], None]
+        on_import_searches=None,  # Callable[[str], bettertrading.ImportResult]
+        searches_count=None,  # Callable[[], int]
         overrides_path=None,  # Path for scoring_overrides.yaml persistence
     ):
         self._root = root
+        self._on_open_searches = on_open_searches
+        self._on_import_searches = on_import_searches
+        self._searches_count = searches_count or (lambda: 0)
+        self._import_window: tk.Toplevel | None = None
         self._bus = bus
         self._config = config
         self._on_travel = on_travel
@@ -318,6 +327,7 @@ class Overlay:
         self._tabs_need_install = True
         host = config.server.host if config.server.host not in ("0.0.0.0", "") else "127.0.0.1"
         self._install_url = f"http://{host}:{config.server.port}{INSTALL_PATH}"
+        self._setup_url = f"http://{host}:{config.server.port}/"
 
         # ---- status strip: tabs | game | prices ........... mute  settings
         strip = tk.Frame(root, bg=STRIP)
@@ -464,8 +474,10 @@ class Overlay:
         # tab is connected. Both rows act on a click only.
         self._setup_panel = tk.Frame(card, bg=SURFACE)
         for num, text, action in (
-            ("1", "Install the browser script", self._open_install),
-            ("2", "Open a Valdo live search on the trade site", lambda: self._open_link(TRADE_URL)),
+            ("1", "Open the sniper Chrome (first time: set it up)", self._open_sniper_chrome),
+            ("2", "Install the browser script", self._open_install),
+            ("3", "Import Better Trading searches", self._open_import),
+            ("4", "Open my live searches", self._open_searches),
         ):
             line = tk.Frame(self._setup_panel, bg=SURFACE)
             line.pack(fill="x", pady=(0, 5))
@@ -485,7 +497,7 @@ class Overlay:
                 widget.bind("<Button-1>", lambda e, act=action: act())
         tk.Label(
             self._setup_panel,
-            text="Needs Chrome + Tampermonkey with “Allow User Scripts” on.\n"
+            text="Everything opens in the sniper Chrome (its own profile).\n"
             "The tabs light turns green once a search tab connects.",
             bg=SURFACE,
             fg=FAINT,
@@ -792,6 +804,8 @@ class Overlay:
                         self._pinned_top = None
                         alerts_dirty = True
                 self._status_line.config(text=text, fg=GOOD if ev.ok else BAD)
+            elif isinstance(ev, Notice):
+                self._status_line.config(text=ev.text, fg=GOOD if ev.ok else BAD)
             elif isinstance(ev, GameStatus):
                 text = "PoE running" if ev.running else "PoE not running"
                 if ev.buyer == "marked":
@@ -1279,6 +1293,64 @@ class Overlay:
         there. Only ever on a click."""
         self._open_link(self._install_url)
 
+    def _open_sniper_chrome(self) -> None:
+        """First time: the setup checklist (Tampermonkey, login). After
+        that: the trade site."""
+        first = browser.is_first_run()
+        self._open_link(self._setup_url if first else TRADE_URL)
+
+    def _open_searches(self) -> None:
+        if self._on_open_searches is not None:
+            self._on_open_searches()
+
+    def _open_import(self) -> None:
+        """Paste box for Better Trading exports (one string per line)."""
+        if self._on_import_searches is None:
+            return
+        if self._import_window is not None and self._import_window.winfo_exists():
+            self._import_window.lift()
+            return
+        win = tk.Toplevel(self._root)
+        self._import_window = win
+        win.title("Import Better Trading searches")
+        win.configure(bg=BG)
+        win.attributes("-topmost", True)
+        tk.Label(
+            win,
+            text="Better Trading: folder ⋯ → Export, then paste here.\n"
+            "Several folders: one export per line. Saved for next time.",
+            bg=BG,
+            fg=DIM,
+            font=self._font("ui", 9),
+            justify="left",
+        ).pack(fill="x", padx=10, pady=(10, 4))
+        box = tk.Text(win, width=60, height=8, bg=SURFACE, fg=FG, insertbackground=FG, wrap="char")
+        box.pack(fill="both", expand=True, padx=10)
+        note = tk.Label(win, text="", bg=BG, fg=DIM, font=self._font("ui", 9), justify="left")
+        note.pack(fill="x", padx=10, pady=4)
+
+        def do_import() -> None:
+            result = self._on_import_searches(box.get("1.0", "end"))
+            skipped = f"\nSkipped {len(result.skipped)}: " + "; ".join(result.skipped[:4])
+            if result.searches:
+                text = f"Saved {len(result.searches)} live searches ✓"
+                note.config(text=text + (skipped if result.skipped else ""), fg=GOOD)
+            else:
+                note.config(text="Nothing usable - kept your saved searches." + skipped, fg=BAD)
+
+        line = tk.Frame(win, bg=BG)
+        line.pack(fill="x", padx=10, pady=(0, 10))
+        for label, action in (("Save", do_import), ("Open live searches", self._open_searches)):
+            btn = tk.Label(
+                line, text=label, bg=HAIR, fg=FG, font=self._font("ui", 10), padx=10, pady=3
+            )
+            btn.configure(cursor="hand2")
+            btn.bind("<Button-1>", lambda e, act=action: act())
+            btn.pack(side="left", padx=(0, 6))
+        saved = self._searches_count()
+        if saved:
+            note.config(text=f"{saved} searches saved. Paste to replace them.")
+
     def _open_link(self, url: str) -> None:
         """In Chrome, where the live searches and Tampermonkey are - never
         just the Windows default browser (see sniper/browser.py)."""
@@ -1658,6 +1730,20 @@ class Overlay:
         # number driving alerts, the user can pin the price they know is
         # right. Session-only on purpose: an old correction outliving the
         # market that justified it would be worse than the original error.
+        heading("Live searches")
+        links = tk.Frame(body, bg=BG)
+        links.grid(row=row_cursor[0], column=0, columnspan=2, sticky="w", padx=10)
+        row_cursor[0] += 1
+        for label, action in (
+            ("Import Better Trading", self._open_import),
+            ("Open my live searches", self._open_searches),
+            ("Open sniper Chrome", self._open_sniper_chrome),
+        ):
+            link = tk.Label(links, text=label, bg=HAIR, fg=FG, font=self._font("ui", 9), padx=8)
+            link.configure(cursor="hand2")
+            link.bind("<Button-1>", lambda e, act=action: act())
+            link.pack(side="left", padx=(0, 6), pady=2)
+
         self._price_entries = {}
         self._price_labels = {}
         heading("Reward prices", "Divine")

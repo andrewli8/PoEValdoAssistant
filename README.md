@@ -381,21 +381,19 @@ trade site, and focusing the game window synthesizes no keypress.
 
 1. **Account A = buyer.** It holds the currency and does every purchase.
    Account B is your second client, doing whatever you like.
-2. **A dedicated Chrome for sniping.** Make a shortcut to `chrome.exe` with
-   its own data folder and the background-throttling flags (live-search
-   tabs are mostly hidden, and Chrome otherwise slows them down):
-
-   ```
-   "C:\Program Files\Google\Chrome\Application\chrome.exe" --user-data-dir="%LOCALAPPDATA%\ValdoSniperChrome" --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows --disable-features=IntensiveWakeUpThrottling
-   ```
-
-   The own `--user-data-dir` matters: a profile made in Chrome's menu shares
-   one browser process with your normal Chrome, which silently ignores the
-   flags whenever any Chrome window is already open.
+2. **A dedicated Chrome for sniping.** The overlay's **Open the sniper
+   Chrome** launches Chrome with its own profile folder
+   (`%LOCALAPPDATA%\ValdoSniperChrome`) and the background-throttling flags
+   (`sniper/browser.py`). It runs as a separate Chrome process, so the flags
+   apply even while your normal Chrome is open. Every overlay link opens
+   there. The first time, it shows a setup page.
 3. In that Chrome: log into pathofexile.com as **Account A only** (logging
    B in here replaces A's session, and travel then moves the wrong
-   account). Install Tampermonkey, turn on **Allow User Scripts**, install
-   the script, open your live searches.
+   account). Install Tampermonkey, turn on **Allow User Scripts**, and install
+   the script. Then import your **Better Trading** folder export
+   (⚙ → *Import Better Trading*, or the setup card) and click **Open my live
+   searches**: each saved search opens as a live tab for the current league,
+   6 s apart, to stay under the search limit.
 4. **Allow local network access.** The first time a trade tab connects,
    Chrome asks whether pathofexile.com may access devices on your local
    network. Click **Allow**: without it the tab never reaches the app

@@ -38,12 +38,28 @@ EXPECTED_USERSCRIPT_VERSION = "0.9.0"
 # on exactly the version this running app expects.
 INSTALL_PATH = "/valdo-sniper.user.js"
 USERSCRIPT_FILE = Path(__file__).resolve().parent.parent / "userscript" / "valdo-sniper.user.js"
+TAMPERMONKEY_URL = (
+    "https://chromewebstore.google.com/detail/tampermonkey/dhdgffkkebhmkfjojejmpbldmpobfkfo"
+)
+# The sniper Chrome opens this page on its first run: a fresh profile has no
+# Tampermonkey and no trade login, and without both nothing is captured.
 _LANDING = (
-    "<!doctype html><meta charset=utf-8><title>Valdo Sniper</title>"
-    "<body style='font:15px Segoe UI,sans-serif;background:#0f1216;color:#e6eaef;padding:32px'>"
-    "<h2>Valdo Sniper is running</h2>"
-    f"<p><a style='color:#5fd069' href='{INSTALL_PATH}'>Install the browser userscript</a>"
-    " (needs Tampermonkey)</p></body>"
+    "<!doctype html><meta charset=utf-8><title>Valdo Sniper setup</title>"
+    "<body style='font:15px Segoe UI,sans-serif;background:#0f1216;color:#e6eaef;"
+    "padding:32px;max-width:640px;line-height:1.6'>"
+    "<h2>Valdo Sniper: set up this Chrome</h2>"
+    "<p>This is the sniper's own Chrome. Do these once:</p><ol>"
+    f"<li><a style='color:#5fd069' href='{TAMPERMONKEY_URL}'>Install Tampermonkey</a></li>"
+    "<li>Open <code>chrome://extensions</code> (paste it in the address bar),"
+    " Tampermonkey, Details, turn on <b>Allow User Scripts</b></li>"
+    f"<li><a style='color:#5fd069' href='{INSTALL_PATH}'>Install the browser script</a></li>"
+    "<li><a style='color:#5fd069' href='https://www.pathofexile.com/login'>Log in to"
+    " pathofexile.com</a> as your <b>buyer</b> account only</li>"
+    "<li>Settings, Performance: add <code>pathofexile.com</code> to"
+    " <i>Always keep these sites active</i>; turn Energy Saver off</li></ol>"
+    "<p>Then click <b>Open my live searches</b> in the overlay. When Chrome asks whether"
+    " the trade site may access devices on your local network, click <b>Allow</b>.</p>"
+    "</body>"
 )
 
 

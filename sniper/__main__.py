@@ -21,7 +21,7 @@ from pathlib import Path
 
 import httpx
 
-from sniper import logging_setup, pricecache
+from sniper import bettertrading, browser, logging_setup, pricecache
 from sniper.alerts import AlertStore
 from sniper.bus import (
     AlertsChanged,
@@ -30,6 +30,7 @@ from sniper.bus import (
     FeedEntry,
     GameStatus,
     ListingSeen,
+    Notice,
     PriceStatus,
     PricingHealth,
     RewardPrice,
@@ -59,6 +60,11 @@ from sniper.server import SniperServer
 # large batch can legitimately take minutes, and a fixed deadline would
 # degrade a run that was working fine.
 WARMUP_STALL_S = 90.0
+# Gap between opening imported live-search tabs. Each tab load runs one trade
+# search; 6s keeps a big import at 10/min, under the site's observed search
+# limit (Exilium budgets 10/60s against ~15/60s).
+# ponytail: fixed spacing; read the search rate-limit headers if 10/min ever bites.
+SEARCH_SPACING_S = 6.0
 
 
 class App:
@@ -117,6 +123,7 @@ class App:
         # never get a primary price, so they must not stall the warm-up
         self._warmup_settled: set[str] = set()
         self._pricing_now: str | None = None  # reward being fetched right now
+        self._setup_url = f"http://{config.server.host}:{config.server.port}/"
 
     # ------------------------------------------------------------ callbacks
 
@@ -271,6 +278,40 @@ class App:
             self.bus.put(AlertsChanged(self.store.views(), new_alert=new_alert, new_view=new_view))
 
     # ------------------------------------------------------------ travel path
+
+    async def open_live_searches(self, searches_path: Path) -> None:
+        """Open every imported Better Trading search as a live tab in the
+        sniper Chrome. Each tab load runs one trade SEARCH, so they open
+        spaced out under the site's search limit, one per SEARCH_SPACING_S.
+        Only ever on a user click."""
+        result = bettertrading.load(searches_path)
+        league = self.book.league
+        if not result.searches:
+            self._notice("No searches imported yet - paste a Better Trading export first", False)
+            return
+        if league is None:
+            self._notice("League not known yet - try again in a few seconds", False)
+            return
+        if browser.is_first_run():
+            # no Tampermonkey there yet: live tabs would capture nothing
+            await self._run_blocking(browser.open_url, self._setup_url)
+            self._notice("First run: finish the setup page in the new Chrome, then click again")
+            return
+        n = len(result.searches)
+        event("open_live_searches", count=n, league=league)
+        for i, search in enumerate(result.searches):
+            await self._run_blocking(browser.open_url, bettertrading.live_url(search, league))
+            self._notice(f"Opening live searches {i + 1}/{n}: {search.title}")
+            if i + 1 < n:
+                await asyncio.sleep(SEARCH_SPACING_S)
+        self._notice(f"Opened {n} live searches ({league})")
+
+    def _notice(self, text: str, ok: bool = True) -> None:
+        if self.bus:
+            self.bus.put(Notice(text, ok))
+
+    async def _run_blocking(self, fn, *args):
+        return await asyncio.get_running_loop().run_in_executor(None, fn, *args)
 
     async def mark_buyer(self) -> None:
         """Mark-buyer key: remember the focused PoE client as the buyer.
@@ -724,6 +765,17 @@ def run_with_overlay(config: Config, config_path: str) -> None:
     def on_price_override(reward: str, divine: float | None) -> None:
         loop.call_soon_threadsafe(app.set_price_override, reward, divine)
 
+    searches_path = Path(config_path).with_name(bettertrading.SEARCHES_NAME)
+
+    def on_open_searches() -> None:
+        asyncio.run_coroutine_threadsafe(app.open_live_searches(searches_path), loop)
+
+    def on_import_searches(text: str):
+        """UI thread: validate + save the paste (a small local file)."""
+        result = bettertrading.save(searches_path, text)
+        event("searches_imported", count=len(result.searches), skipped=list(result.skipped))
+        return result
+
     def on_jackpot_change(min_net: float, min_yield: float) -> None:
         loop.call_soon_threadsafe(app.set_jackpot_thresholds, min_net, min_yield)
 
@@ -736,6 +788,9 @@ def run_with_overlay(config: Config, config_path: str) -> None:
         on_settings_change=on_settings_change,
         on_price_override=on_price_override,
         on_jackpot_change=on_jackpot_change,
+        on_open_searches=on_open_searches,
+        on_import_searches=on_import_searches,
+        searches_count=lambda: len(bettertrading.load(searches_path).searches),
         overrides_path=Path(config_path).with_name(SCORING_OVERRIDES_NAME),
     )
     try:
