@@ -124,6 +124,7 @@ function notePushFrame(data) {
   pushFrames += 1;
   for (const id of msg.new) {
     if (typeof id !== 'string') continue;
+    pushedAt.delete(id); // re-announced ids move to the back of the FIFO
     pushedAt.set(id, now);
     if (pushedAt.size > PUSHED_CAP) pushedAt.delete(pushedAt.keys().next().value);
   }
@@ -646,6 +647,16 @@ function main() {
   // The click path is unaffected: entry.id === the row's data-id.
 
   let networkSilentUntil = Date.now() + NETWORK_SILENT_MS;
+  // main() now runs at DOMContentLoaded (0.9.0), earlier than the old
+  // document-idle: restart the page-load window at `load` so slow seed
+  // fetches still land inside it
+  if (document.readyState !== 'complete') {
+    window.addEventListener(
+      'load',
+      () => { networkSilentUntil = Date.now() + NETWORK_SILENT_MS; },
+      { once: true },
+    );
+  }
 
   /* Why the network path did or did not forward a listing, reported in
      every hello and logged server-side. The two capture paths share the

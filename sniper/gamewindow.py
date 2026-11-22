@@ -82,11 +82,15 @@ def mark_foreground(title: str) -> BuyerWindow | None:
     Blocking win32 - run in the executor."""
     if win32gui is None:
         return None
-    hwnd = win32gui.GetForegroundWindow()
-    if not hwnd or win32gui.GetWindowText(hwnd) != title:
-        event("buyer_mark_rejected", reason="foreground_not_poe")
+    try:
+        hwnd = win32gui.GetForegroundWindow()
+        if not hwnd or win32gui.GetWindowText(hwnd) != title:
+            event("buyer_mark_rejected", reason="foreground_not_poe")
+            return None
+        _tid, pid = win32process.GetWindowThreadProcessId(hwnd)
+    except Exception as e:  # noqa: BLE001 - pywintypes.error
+        event("buyer_mark_rejected", reason=repr(e))
         return None
-    _tid, pid = win32process.GetWindowThreadProcessId(hwnd)
     created = _process_created(pid)
     if created is None:
         event("buyer_mark_rejected", reason="process_gone", pid=pid)
@@ -101,9 +105,12 @@ def buyer_alive(buyer: BuyerWindow, title: str) -> bool:
     same HWND, still titled like PoE, same pid, same process start time."""
     if win32gui is None:
         return False
-    if not win32gui.IsWindow(buyer.hwnd) or win32gui.GetWindowText(buyer.hwnd) != title:
+    try:
+        if not win32gui.IsWindow(buyer.hwnd) or win32gui.GetWindowText(buyer.hwnd) != title:
+            return False
+        _tid, pid = win32process.GetWindowThreadProcessId(buyer.hwnd)
+    except Exception:  # noqa: BLE001 - window died mid-check (pywintypes.error)
         return False
-    _tid, pid = win32process.GetWindowThreadProcessId(buyer.hwnd)
     return pid == buyer.pid and _process_created(pid) == buyer.created
 
 
@@ -144,8 +151,9 @@ def _bring_forward(hwnd: int) -> None:
         win32gui.SetForegroundWindow(hwnd)
         win32gui.BringWindowToTop(hwnd)
     finally:
-        if attached:
-            win32process.AttachThreadInput(me, fg_tid, False)
+        if attached:  # a failing detach must not mask the real error
+            with contextlib.suppress(Exception):
+                win32process.AttachThreadInput(me, fg_tid, False)
 
 
 def focus_poe_window(title: str, buyer: BuyerWindow | None = None) -> bool:

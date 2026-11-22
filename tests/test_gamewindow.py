@@ -124,3 +124,27 @@ def test_no_synthetic_input_api_is_referenced():
 
     src = inspect.getsource(gamewindow)
     assert "keybd_event" not in src and "SendInput" not in src
+
+
+def test_window_dying_mid_check_reads_as_lost_not_an_exception(win, monkeypatch):
+    def boom(h):
+        raise OSError("invalid window handle")  # pywintypes.error stand-in
+
+    monkeypatch.setattr(gamewindow.win32process, "GetWindowThreadProcessId", boom)
+    assert buyer_alive(BuyerWindow(hwnd=10, pid=100, created=100.5), TITLE) is False
+    win.foreground = 10
+    assert mark_foreground(TITLE) is None
+
+
+def test_failing_detach_still_flashes(win, monkeypatch):
+    def refuse(h):
+        raise RuntimeError("denied")
+
+    def attach(a, b, on):
+        if not on:
+            raise RuntimeError("detach failed")
+
+    monkeypatch.setattr(gamewindow.win32gui, "SetForegroundWindow", refuse)
+    monkeypatch.setattr(gamewindow.win32process, "AttachThreadInput", attach)
+    assert focus_poe_window(TITLE) is False
+    assert ("flash", 20) in win.calls

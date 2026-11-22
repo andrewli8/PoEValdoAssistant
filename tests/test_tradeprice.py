@@ -286,8 +286,22 @@ async def test_429_restriction_headers_drive_the_backoff():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("status,invalid", [(401, True), (403, True), (404, False)])
-async def test_4xx_enters_backoff_and_flags_bad_session(status, invalid):
+async def test_404_on_one_reward_is_not_a_global_backoff():
+    """One odd reward name must not put every other reward into backoff."""
+
+    def handler(request):
+        return httpx.Response(404, json={})
+
+    pricer = pricer_with(handler)
+    with pytest.raises(httpx.HTTPStatusError):
+        await pricer.fetch_reward_listings("Allflame", "Foil Mageblood")
+    assert not pricer.in_backoff and not pricer.session_invalid
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", [401, 403])
+async def test_4xx_enters_backoff_and_flags_bad_session(status):
+    invalid = True
     """An expired session used to skip the backoff and re-fire every ~15s
     forever on the budget the browser shares."""
     calls = []

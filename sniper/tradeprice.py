@@ -231,12 +231,21 @@ class TradePricer:
                 retry_after = rate_limit_delay(resp.headers)
             self._enter_backoff(retry_after)
             raise TradeBackoff(f"HTTP {resp.status_code}")
-        if 400 <= resp.status_code < 500:
-            # any other 4xx used to skip the backoff entirely, so an expired
-            # session re-fired a burst every ~15s forever on the shared budget
+        if resp.status_code in (401, 403):
+            # refused auth (expired POESESSID, or a block) used to skip the
+            # backoff entirely and re-fire every ~15s forever on the budget
+            # the browser shares; this one is global, every request would fail
             self._enter_backoff(None)
-            self.session_invalid = resp.status_code in (401, 403)
+            self.session_invalid = True
             raise TradeBackoff(f"HTTP {resp.status_code}")
+        # anything else non-2xx (400/404 on one odd reward, a 3xx) belongs to
+        # THIS request only: no global backoff; the caller skips the reward
+        # until its next refresh
+        resp.raise_for_status()
+        if resp.status_code >= 300:
+            raise httpx.HTTPStatusError(
+                f"HTTP {resp.status_code}", request=resp.request, response=resp
+            )
         self.session_invalid = False
         self._fail_count = 0
         self._observe_limits(resp)

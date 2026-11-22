@@ -110,7 +110,7 @@ class PricingHealth:
     backoff_s: float
     unpriced: int
     total: int
-    session_invalid: bool = False  # the API answered 401/403: fix POESESSID
+    session_invalid: bool = False  # 401/403: bad POESESSID (or a 403 block)
 
 
 @dataclass(frozen=True)

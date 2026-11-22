@@ -16,6 +16,7 @@ import contextlib
 import threading
 import time
 from collections import OrderedDict
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from sniper import logging_setup, pricecache
@@ -94,6 +95,10 @@ class App:
         self.watcher = GameWatcher(config.game.process_names)
         # the marked buyer client (two-client setups); None = any PoE window
         self.buyer: BuyerWindow | None = None
+        self._buyer_lost = False
+        # win32 calls on the press path get their own thread, so a busy
+        # default executor (pricing, process scans) can never delay a press
+        self._win_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="win32")
         # every recent decision (any verdict) so grayed-out feed rows are
         # clickable too; _traveled_ids guards one-travel-per-listing
         self._recent: OrderedDict[str, Decision] = OrderedDict()
@@ -269,16 +274,25 @@ class App:
         """Mark-buyer key: remember the focused PoE client as the buyer.
         Local only - nothing is sent to the game or the trade site."""
         title = self.config.game.window_title
-        buyer = await asyncio.get_running_loop().run_in_executor(None, mark_foreground, title)
+        try:
+            buyer = await asyncio.get_running_loop().run_in_executor(
+                self._win_pool, mark_foreground, title
+            )
+        except Exception as e:  # noqa: BLE001 - a press must always answer
+            event("buyer_mark_failed", error=repr(e))
+            buyer = None
         if buyer is not None:
             self.buyer = buyer
+            self._buyer_lost = False
         if self.bus:
             self.bus.put(GameStatus(self.watcher.running.is_set(), self._buyer_state()))
             if buyer is None:
                 self.bus.put(ClickOutcome("", False, "mark buyer: focus a PoE window first"))
 
     def _buyer_state(self) -> str:
-        return "" if self.buyer is None else "marked"
+        if self.buyer is None:
+            return ""
+        return "lost" if self._buyer_lost else "marked"
 
     async def _buyer_gate(self) -> bool:
         """With a buyer marked, travel only while THAT client is alive: any
@@ -286,11 +300,17 @@ class App:
         only client B in game. Checked before anything is consumed."""
         if self.buyer is None:
             return True
-        alive = await asyncio.get_running_loop().run_in_executor(
-            None, buyer_alive, self.buyer, self.config.game.window_title
-        )
+        try:
+            alive = await asyncio.get_running_loop().run_in_executor(
+                self._win_pool, buyer_alive, self.buyer, self.config.game.window_title
+            )
+        except Exception as e:  # noqa: BLE001 - fail closed, but say so
+            event("buyer_check_failed", error=repr(e))
+            alive = False
         if alive:
+            self._buyer_lost = False
             return True
+        self._buyer_lost = True
         event("travel_blocked", reason="buyer_lost", pid=self.buyer.pid)
         if self.bus:
             self.bus.put(GameStatus(self.watcher.running.is_set(), "lost"))
@@ -360,9 +380,11 @@ class App:
 
     async def _travel(self, alert) -> None:
         lid = alert.decision.listing.listing_id
-        if self.bus:
-            self.bus.put(Traveled(alert.view()))
         ok = await self.server.send_click_travel(lid)
+        # pin + clipboard only for a click that actually left; a dead tab
+        # must not overwrite the clipboard or pin a travel that never happened
+        if ok and self.bus:
+            self.bus.put(Traveled(alert.view()))
         if not ok:
             # the click never left the building, so no click_result is coming:
             # settle it here or the runners-up would be lost to a travel that
@@ -372,9 +394,15 @@ class App:
             if self.bus:
                 self.bus.put(ClickOutcome(lid, False, "tab gone - travel not sent"))
         # click first (latency-critical), then bring the game to front
-        await asyncio.get_running_loop().run_in_executor(
-            None, focus_poe_window, self.config.game.window_title, self.buyer
-        )
+        try:
+            focused = await asyncio.get_running_loop().run_in_executor(
+                self._win_pool, focus_poe_window, self.config.game.window_title, self.buyer
+            )
+        except Exception as e:  # noqa: BLE001
+            event("focus_failed", reason=repr(e))
+            focused = False
+        if not focused and ok and self.bus:
+            self.bus.put(ClickOutcome(lid, True, "travel sent - switch to the game yourself"))
 
     # ------------------------------------------------------------ live tuning
 
@@ -546,6 +574,8 @@ class App:
                     # only THIS reward is broken (bad payload, odd name);
                     # the rest of the batch is still worth pricing
                     event("trade_price_error", reward=reward, error=repr(e))
+                    # retried at its next refresh, not every 15s pass
+                    last_priced[reward] = time.monotonic()
                     continue
                 last_priced[reward] = time.monotonic()
                 div_prices = [
@@ -679,7 +709,10 @@ def run_with_overlay(config: Config, config_path: str) -> None:
     ) -> str | None:
         """Returns an error string (shown in the panel) or None. The hotkey
         rebinds on this (UI) thread; scoring/threshold swap on the loop."""
-        error = hotkey.rebind(combo)
+        if combo.strip().lower() == config.hotkey.mark_buyer.strip().lower():
+            error = f"{combo!r} is the mark-buyer key - pick another"
+        else:
+            error = hotkey.rebind(combo)
         loop.call_soon_threadsafe(app.apply_tuning, scoring_config, min_yield, running_cost)
         return error
 

@@ -415,7 +415,7 @@ trade site, and focusing the game window synthesizes no keypress.
    it). To keep any account penalty off the buyer, either leave
    `POESESSID` empty or use Account B's, copied from an incognito window
    that you then close **without logging out** (logging out kills the
-   cookie). `TRADE SESSION INVALID` in the status strip means the cookie
+   cookie). `TRADE API REFUSED US` in the status strip means the cookie
    expired.
 
 On travel the map's name goes to the clipboard (`alerts.copy_on_travel`):
@@ -438,7 +438,7 @@ search matches map names is not verified yet; check it once.
 | Alert shows no latency | The DOM path captured it, or the tab is on an old userscript. `python tools/capture_report.py` says which |
 | Alerts but hotkey does nothing | `PoE not running` in the status strip — the hotkey is deliberately inert without the game. `BUYER LOST`: the marked buyer client closed; focus it and press the mark key again |
 | Tab never connects, console shows `ERR_BLOCKED_BY_LOCAL_NETWORK_ACCESS_CHECKS` | Chrome's local network permission was denied: allow it in the site settings for pathofexile.com, then reload |
-| `TRADE SESSION INVALID` | The `POESESSID` in `.env` expired or was logged out: replace it or leave it empty |
+| `TRADE API REFUSED US` | The trade API answered 401/403: the `POESESSID` in `.env` expired or was logged out (replace it or leave it empty), or GGG is blocking requests |
 | Travel says `item no longer available` | Someone beat you to it — the runner-up is promoted to the top slot, press again to take it. Check the latency figure on the alerts you're losing |
 | Config error on startup naming a rule | Two `mod_scoring` rules share a label; labels must be unique (the ⚙ panel keys on them) |
 | Firefox | Not supported — Chrome only (`ws://127.0.0.1` from HTTPS pages) |

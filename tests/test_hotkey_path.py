@@ -324,3 +324,32 @@ def _a_view():
     )
     app._on_decision(margin.evaluate(lst, app.book, app.config.thresholds, ModRules([])))
     return app.store.views()[0]
+
+
+async def test_gate_check_raising_fails_closed_with_a_message(monkeypatch):
+    from sniper.gamewindow import BuyerWindow
+
+    app, bus, clicks, _focused = build_app(monkeypatch)
+    app.buyer = BuyerWindow(hwnd=10, pid=100, created=1.0)
+
+    def boom(b, t):
+        raise OSError("window vanished")
+
+    monkeypatch.setattr("sniper.__main__.buyer_alive", boom)
+    feed(app, "best", 60)
+    await app.hotkey_pressed()
+    assert clicks == []
+    assert app._buyer_state() == "lost"  # stays lost on the next watcher status
+    assert any("buyer client lost" in e.reason for e in bus.drain() if isinstance(e, ClickOutcome))
+
+
+async def test_failed_send_does_not_pin_or_copy(monkeypatch):
+    app, bus, _clicks, _focused = build_app(monkeypatch)
+
+    async def dead_tab(listing_id):
+        return False
+
+    monkeypatch.setattr(app.server, "send_click_travel", dead_tab)
+    feed(app, "best", 60)
+    await app.hotkey_pressed()
+    assert not [e for e in bus.drain() if type(e).__name__ == "Traveled"]

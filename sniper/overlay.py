@@ -950,7 +950,7 @@ class Overlay:
         """
         health = self._pricing_health
         if health is not None and health.session_invalid:
-            self._price_label.config(text="TRADE SESSION INVALID (POESESSID)", fg=BAD)
+            self._price_label.config(text="TRADE API REFUSED US (check POESESSID)", fg=BAD)
             return
         if health is not None and health.backoff_s > 0:
             self._price_label.config(text=f"RATE LIMITED {health.backoff_s:.0f}s", fg=BAD)
